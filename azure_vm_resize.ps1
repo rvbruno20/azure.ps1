@@ -1,5 +1,5 @@
 # Connect using the managed identity of the host (VM/VMSS/Automation)
-Connect-AzAccount -Identity
+Connect-AzAccount
 
 # Current context (subscription, tenant)
 $context = Get-AzContext
