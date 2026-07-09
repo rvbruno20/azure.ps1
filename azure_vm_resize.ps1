@@ -1,46 +1,43 @@
-# Connect using the managed identity of the host (VM/VMSS/Automation)
+# Connect to Azure using the current signed-in identity.
 Connect-AzAccount
 
-# Current context (subscription, tenant)
+# Inspect the active Azure context and subscription.
 $context = Get-AzContext
 
-# Map: subscriptionName -> array of VM names
+# Configuration values for the target VM and desired size.
 $subscriptionName = "<subscription-name>"
 $virtualMachineName = "<virtual-machine-name>"
-
-# Desired VM size
 $newVMSize = "<new-vm-size>"
 
-# Ensure we are in the correct subscription by name
+# Ensure the correct subscription is selected before making changes.
 if ($context.Subscription.Name -ne $subscriptionName) {
     Set-AzContext -Subscription $subscriptionName | Out-Null
     $context = Get-AzContext
 }
 
-# Get VM including status info
+# Retrieve the VM details and status once.
 $vm = Get-AzVM -Name $virtualMachineName -Status -ErrorAction SilentlyContinue
 if (-not $vm) {
-    Write-Warning "VM '$virtualMachineName' not found in subscription '$subscriptionName'. Skipping."
+    Write-Warning "VM '$virtualMachineName' was not found in subscription '$subscriptionName'."
     exit 1
 }
 
-# Determine current power state (Code like 'PowerState/running' or 'PowerState/deallocated')
-$powerState = (Get-AzVM -Name $virtualMachineName -Status -ErrorAction SilentlyContinue).PowerState
+# Determine the current power state from the retrieved VM object.
+$powerState = $vm.PowerState
 
-# If running, deallocate first (required to change size)
+# Deallocate the VM before resizing if it is currently running.
 if ($powerState -like '*running*') {
-    Write-Output "Stopping (deallocating) Azure VM - $($vm.Name)"
+    Write-Output "Deallocating Azure VM '$($vm.Name)' before resizing."
     Stop-AzVM -ResourceGroupName $vm.ResourceGroupName -Name $vm.Name -Force -ErrorAction Stop | Out-Null
-
 }
 
-# Reload VM model (fresh) and set new size
+# Reload the VM model and update the size.
 $vmToUpdate = Get-AzVM -Name $virtualMachineName -ResourceGroupName $vm.ResourceGroupName -ErrorAction Stop
 $vmToUpdate.HardwareProfile.VmSize = $newVMSize
 
-# Apply the change
+# Apply the VM size change.
 Update-AzVM -ResourceGroupName $vm.ResourceGroupName -VM $vmToUpdate -ErrorAction Stop
 
-# Start the VM after resize
+# Start the VM after the resize completes.
 Start-AzVM -ResourceGroupName $vm.ResourceGroupName -Name $virtualMachineName -ErrorAction Stop | Out-Null
-Write-Output "Resize and restart complete for VM - $($virtualMachineName) (New size: $newVMSize)"
+Write-Output "Resize completed for VM '$virtualMachineName'. New size: $newVMSize"
